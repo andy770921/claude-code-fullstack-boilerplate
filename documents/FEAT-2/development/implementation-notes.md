@@ -1,58 +1,58 @@
 # FEAT-2: Implementation Notes
 
-記錄實際實作與原計劃的差異，以及簡化重構後的最終狀態。
+Records the differences between actual implementation and original plan, and the final state after simplification and refactoring.
 
 ---
 
-## 最終檔案清單
+## Final File List
 
-### 新增
+### Added
 
-| 路徑                                                         | 說明                                                     |
+| Path                                                         | Description                                              |
 | ------------------------------------------------------------ | -------------------------------------------------------- |
-| `shared/src/types/health.ts`                                 | `HealthResponse` 型別                                    |
-| `shared/src/types/api.ts`                                    | `ApiResponse<T>` 泛型                                    |
+| `shared/src/types/health.ts`                                 | `HealthResponse` type                                    |
+| `shared/src/types/api.ts`                                    | `ApiResponse<T>` generic                                 |
 | `shared/src/index.ts`                                        | barrel export                                            |
 | `shared/package.json`                                        | `@repo/shared` workspace                                 |
-| `shared/tsconfig.json`                                       | TypeScript 設定                                          |
-| `frontend/src/app/layout.tsx`                                | Root layout，包入 Providers                              |
-| `frontend/src/app/page.tsx`                                  | 首頁，呼叫 `useHealth()`                                 |
-| `frontend/src/app/providers.tsx`                             | `TanStackQueryProvider` 包裝層                           |
+| `shared/tsconfig.json`                                       | TypeScript configuration                                 |
+| `frontend/src/app/layout.tsx`                                | Root layout, wraps Providers                             |
+| `frontend/src/app/page.tsx`                                  | Home page, calls `useHealth()`                           |
+| `frontend/src/app/providers.tsx`                             | `TanStackQueryProvider` wrapper                          |
 | `frontend/src/constants/common.ts`                           | `HTTP_STATUS_CODE`                                       |
 | `frontend/src/queries/use-health.ts`                         | `useHealth()` hook                                       |
-| `frontend/src/lib/api-client.ts`                             | 具名 API 客戶端                                          |
+| `frontend/src/lib/api-client.ts`                             | Named API client                                         |
 | `frontend/src/utils/fetchers/fetchers.ts`                    | `fetchApi` + `streamingFetchApi`                         |
-| `frontend/src/utils/fetchers/fetchers.utils.ts`              | `FetchOptions`、`getFetchQueryOptions`、`parseErrorBody` |
+| `frontend/src/utils/fetchers/fetchers.utils.ts`              | `FetchOptions`, `getFetchQueryOptions`, `parseErrorBody` |
 | `frontend/src/utils/fetchers/fetchers.error.ts`              | `ApiResponseError`                                       |
-| `frontend/src/utils/fetchers/fetchers.client.ts`             | client-side `defaultFetchFn`、`streamingFetchFn`         |
-| `frontend/src/vendors/tanstack-query/provider.tsx`           | `TanStackQueryProvider`，設定 global `queryFn`           |
+| `frontend/src/utils/fetchers/fetchers.client.ts`             | client-side `defaultFetchFn`, `streamingFetchFn`         |
+| `frontend/src/vendors/tanstack-query/provider.tsx`           | `TanStackQueryProvider`, configures global `queryFn`     |
 | `frontend/src/vendors/tanstack-query/provider.utils.ts`      | `stringifyQueryKey`                                      |
-| `frontend/src/vendors/tanstack-query/provider.utils.spec.ts` | `stringifyQueryKey` 單元測試                             |
-| `frontend/next.config.ts`                                    | Next.js 設定，`/api/*` rewrite → backend                 |
+| `frontend/src/vendors/tanstack-query/provider.utils.spec.ts` | `stringifyQueryKey` unit tests                           |
+| `frontend/next.config.ts`                                    | Next.js config, `/api/*` rewrite → backend               |
 | `frontend/vercel.json`                                       | `{ "framework": "nextjs" }`                              |
 
-### 刪除（Vite 相關）
+### Deleted (Vite Related)
 
 - `frontend/index.html`
 - `frontend/vite.config.ts`
 - `frontend/tsconfig.node.json`
 - `frontend/.eslintrc.cjs`
 - `frontend/src/App.tsx`, `App.css`, `App.test.tsx`, `main.tsx`, `setupTests.ts`
-- `frontend/package-lock.json`（改由 root `package-lock.json` 管理）
-- `backend/.eslintrc.js`（合併至 root `.eslintrc.js`）
+- `frontend/package-lock.json` (now managed by root `package-lock.json`)
+- `backend/.eslintrc.js` (merged into root `.eslintrc.js`)
 
 ---
 
-## 與計劃的差異
+## Differences from Plan
 
-### 1. `fetchers.ts`：AbortController 取代 Promise.race 逾時機制
+### 1. `fetchers.ts`: AbortController Replaces Promise.race Timeout Mechanism
 
-**計劃（RFC-C）**：使用 `Promise.race([fetchPromise, timeoutPromise])` 實作逾時。
+**Plan (RFC-C)**: Use `Promise.race([fetchPromise, timeoutPromise])` for timeout implementation.
 
-**實際**：改用 `AbortController`。
+**Actual**: Changed to use `AbortController`.
 
 ```typescript
-// 最終實作
+// Final implementation
 const controller = new AbortController();
 const timeoutId: ReturnType<typeof setTimeout> = setTimeout(() => controller.abort(), timeout);
 try {
@@ -71,21 +71,21 @@ try {
 }
 ```
 
-**原因**：
+**Reasons**:
 
-- `Promise.race` 版本在逾時後 `fetch` promise 仍在執行，造成連線洩漏（connection leak）。`streamingFetchApi` 是長連線，問題尤為嚴重。
-- `AbortController` 會主動取消底層連線。
-- 同時移除兩個函式中的 `try { ... } catch (error) { throw error; }` 無意義包裝（原本有 `// eslint-disable-next-line no-useless-catch` 注解抑制警告）。
-- `timeoutId` 加上明確型別 `ReturnType<typeof setTimeout>`。
+- In the `Promise.race` version, after timeout, the `fetch` promise continues executing, causing connection leaks. This is especially problematic for `streamingFetchApi` with long-lived connections.
+- `AbortController` actively cancels the underlying connection.
+- Removed meaningless `try { ... } catch (error) { throw error; }` wrappers in both functions (previously had `// eslint-disable-next-line no-useless-catch` comments to suppress warnings).
+- Added explicit type `ReturnType<typeof setTimeout>` to `timeoutId`.
 
-### 2. `fetchers.utils.ts`：`parseErrorBody` 移除 `.clone()` 與型別謊言
+### 2. `fetchers.utils.ts`: `parseErrorBody` Removes `.clone()` and Type Lies
 
-**計劃**：未明確規定實作細節。
+**Plan**: Implementation details were not explicitly specified.
 
-**實際變更**：
+**Actual Changes**:
 
 ```typescript
-// 之前
+// Before
 let errorBody: TErrorBody | string = '' as TErrorBody;
 // ...
 errorBody = (await response.clone().json()) as TErrorBody;
@@ -94,7 +94,7 @@ errorBody = (await response.clone().text()) as TErrorBody;
 // ...
 errorBody = '' as TErrorBody;
 
-// 之後
+// After
 let errorBody: TErrorBody | string = '';
 // ...
 errorBody = (await response.json()) as TErrorBody;
@@ -104,41 +104,41 @@ errorBody = await response.text();
 errorBody = '';
 ```
 
-**原因**：
+**Reasons**:
 
-- `'' as TErrorBody` 是型別謊言——呼叫端以為收到 `TErrorBody`，實際上是空字串，存取 `.error.message` 會在執行期崩潰。回傳型別已是 `TErrorBody | string`，直接賦值 `''` 完全合法。
-- `parseErrorBody` 在 `streamingFetchApi` 中被呼叫時，response body 尚未被讀取，無需 `.clone()`；直接讀取原始 response 即可。
+- `'' as TErrorBody` is a type lie — callers expect to receive `TErrorBody`, but actually get an empty string, causing runtime crashes when accessing `.error.message`. Since the return type is already `TErrorBody | string`, directly assigning `''` is completely legal.
+- When `parseErrorBody` is called in `streamingFetchApi`, the response body hasn't been read yet, so `.clone()` is unnecessary; reading the original response directly is sufficient.
 
-### 3. `fetchers.client.ts`：`baseUrl` 改為指向 Backend
+### 3. `fetchers.client.ts`: `baseUrl` Changed to Point to Backend
 
-**計劃（RFC-C）**：`baseUrl = window.location.origin`（即 `http://localhost:3001`），搭配 Next.js rewrite 將 `/api/*` 轉發至 backend。
+**Plan (RFC-C)**: `baseUrl = window.location.origin` (i.e., `http://localhost:3001`), with Next.js rewrite forwarding `/api/*` to backend.
 
-**實際**：
+**Actual**:
 
 ```typescript
-// 之前（計劃版）
+// Before (planned version)
 const baseUrl = window.location.origin;
 
-// 之後（實際）
+// After (actual)
 const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 ```
 
-**原因**：
+**Reasons**:
 
-- `window.location.origin` 是 Next.js frontend（`:3001`）。`defaultFetchFn('health')` 會產生 URL `/health`，而 Next.js rewrite 只對 `/api/*` 生效，`/health` 直接打到 Next.js server，回傳 404。
-- 將 baseUrl 改為直接指向 backend（`:3000`），`queryKey: ['health']` → `stringifyQueryKey` → `'health'` → `http://localhost:3000/health` 正確抵達 backend。
-- 預設值 `'http://localhost:3000'` 與 `next.config.ts` 的 rewrite destination 一致：
+- `window.location.origin` points to the Next.js frontend (`:3001`). `defaultFetchFn('health')` generates URL `/health`, but Next.js rewrite only applies to `/api/*`, so `/health` hits the Next.js server directly, returning 404.
+- Changed baseUrl to point directly to backend (`:3000`), so `queryKey: ['health']` → `stringifyQueryKey` → `'health'` → `http://localhost:3000/health` correctly reaches backend.
+- Default value `'http://localhost:3000'` is consistent with the rewrite destination in `next.config.ts`:
 
   ```typescript
   // next.config.ts
   destination: `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'}/:path*`;
   ```
 
-- Backend 已啟用 `origin: true` CORS，允許來自 `:3001` 的跨域請求，不會有 CORS 問題。
+- Backend has enabled `origin: true` CORS, allowing cross-origin requests from `:3001`, so there are no CORS issues.
 
-### 4. `use-health.ts`：使用 `useQuery<HealthResponse>` 型別參數
+### 4. `use-health.ts`: Uses `useQuery<HealthResponse>` Type Parameter
 
-**計劃（RFC-C）**：
+**Plan (RFC-C)**:
 
 ```typescript
 export function useHealth() {
@@ -146,7 +146,7 @@ export function useHealth() {
 }
 ```
 
-**實際**：
+**Actual**:
 
 ```typescript
 import type { HealthResponse } from '@repo/shared';
@@ -158,42 +158,42 @@ export function useHealth() {
 }
 ```
 
-**原因**：沒有明確 `queryFn` 時，TanStack Query 無法從型別推導出 `data` 的形狀，`data` 會是 `unknown`。`page.tsx` 試圖存取 `data.status` 與 `data.timestamp`，導致 TypeScript 編譯錯誤。加上型別參數讓 `data` 正確推導為 `HealthResponse`。
+**Reason**: Without an explicit `queryFn`, TanStack Query cannot infer the shape of `data` from types, and `data` becomes `unknown`. When `page.tsx` tries to access `data.status` and `data.timestamp`, it causes TypeScript compilation errors. Adding the type parameter allows `data` to be correctly inferred as `HealthResponse`.
 
-### 5. ESLint：統一至 root `.eslintrc.js`
+### 5. ESLint: Unified to Root `.eslintrc.js`
 
-**計劃**：未明確規定。
+**Plan**: Not explicitly specified.
 
-**實際**：
+**Actual**:
 
-- 刪除 `backend/.eslintrc.js` 與 `frontend/.eslintrc.cjs`。
-- 所有 ESLint 設定集中在 root `.eslintrc.js`，使用 `overrides` 按路徑分別套用 TypeScript、Next.js、Backend 規則。
-- 所有 ESLint 相關套件（`@typescript-eslint/parser`、`@typescript-eslint/eslint-plugin`、`eslint-config-next` 等）安裝在 root `node_modules`。
+- Deleted `backend/.eslintrc.js` and `frontend/.eslintrc.cjs`.
+- All ESLint configuration centralized in root `.eslintrc.js`, using `overrides` to apply TypeScript, Next.js, and Backend rules separately by path.
+- All ESLint-related packages (`@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`, `eslint-config-next`, etc.) installed in root `node_modules`.
 
 ---
 
-## 路由架構（最終）
+## Routing Architecture (Final)
 
 ```
-瀏覽器 (localhost:3001)
+Browser (localhost:3001)
   └─ useQuery({ queryKey: ['health'] })
        └─ global queryFn: defaultFetchFn(stringifyQueryKey(['health']))
             └─ defaultFetchFn('health')
                  └─ baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
-                      └─ fetch('http://localhost:3000/health')  ← 直接到 Backend
+                      └─ fetch('http://localhost:3000/health')  ← Direct to Backend
                            └─ NestJS GET /health → { status: 'ok', timestamp: '...' }
 ```
 
-`api-client.ts` 的 `/api/health` 路徑（走 Next.js rewrite）保留，可供不透過 global queryFn 的直接呼叫場景使用。
+The `/api/health` path in `api-client.ts` (using Next.js rewrite) is preserved for direct call scenarios that don't go through the global queryFn.
 
 ---
 
-## 驗證清單
+## Verification Checklist
 
-- [x] `npm install` — 無錯誤
-- [x] `npx tsc --noEmit -p frontend/tsconfig.json` — 通過
-- [ ] `npm run dev` — FE `:3001`、BE `:3000` 同時啟動
-- [ ] 瀏覽 `http://localhost:3001` — 顯示 backend health status
-- [ ] `npm run build` — 兩個 app 均成功建置
-- [ ] `npm run lint` — 無錯誤
-- [ ] `npm run test` — `provider.utils.spec.ts` 通過
+- [x] `npm install` — No errors
+- [x] `npx tsc --noEmit -p frontend/tsconfig.json` — Passed
+- [ ] `npm run dev` — FE `:3001`, BE `:3000` both start
+- [ ] Browse `http://localhost:3001` — Shows backend health status
+- [ ] `npm run build` — Both apps build successfully
+- [ ] `npm run lint` — No errors
+- [ ] `npm run test` — `provider.utils.spec.ts` passes
