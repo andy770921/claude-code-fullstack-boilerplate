@@ -27,6 +27,11 @@ async function bootstrap() {
     SwaggerModule.setup('/', app, document, {
       customSiteTitle: 'Backend API Documentation',
       customfavIcon: 'https://nestjs.com/favicon.ico',
+      customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
+      customJs: [
+        'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.min.js',
+      ],
     });
 
     await app.init();
