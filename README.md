@@ -62,16 +62,20 @@ The frontend calls the backend via a typed API client (`frontend/src/lib/api-cli
 
 ## Production
 
-| App | URL |
-|-----|-----|
+| App      | URL                                                 |
+| -------- | --------------------------------------------------- |
 | Frontend | https://claude-code-boilerplate-frontend.vercel.app |
-| Backend | https://claude-code-boilerplate-backend.vercel.app |
+| Backend  | https://claude-code-boilerplate-backend.vercel.app  |
 
 ## Documentation
 
 See [CLAUDE.md](CLAUDE.md) for detailed project instructions.
 
 Work progress is tracked in [documents/](documents/) folder organized by ticket number.
+
+## Ref
+
+- https://github.com/mattpocock/skills/tree/main
 
 ## License
 
