@@ -279,7 +279,7 @@ vercel logs your-project.vercel.app
 ## References
 
 - [Vercel NestJS Documentation](https://vercel.com/docs/frameworks/backend/nestjs)
-- [Vercel Vite Documentation](https://vercel.com/docs/frameworks/vite)
+- [Vercel Next.js Documentation](https://vercel.com/docs/frameworks/nextjs)
 - [Vercel Environment Variables](https://vercel.com/docs/concepts/projects/environment-variables)
 - [Vercel Serverless Functions](https://vercel.com/docs/concepts/functions/serverless-functions)
 

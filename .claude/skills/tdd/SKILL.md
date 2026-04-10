@@ -136,7 +136,7 @@ Update status in: `documents/{TICKET}/development/tdd-progress.md`
 ...
 
 ## Testing Strategy
-- Test framework: [Vitest/Jest]
+- Test framework: [Jest]
 - Test style: [Unit/Integration]
 - Mocking approach: [What to mock, if anything]
 

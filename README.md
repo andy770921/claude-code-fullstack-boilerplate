@@ -4,7 +4,7 @@ A fullstack monorepo with Next.js frontend and NestJS backend, optimized for Cla
 
 ## Features
 
-- **Frontend**: Next.js 15 (App Router) + TypeScript + TanStack Query v5 + Vitest
+- **Frontend**: Next.js 15 (App Router) + TypeScript + TanStack Query v5 + Jest
 - **Backend**: NestJS 11 + TypeScript + Jest
 - **Shared**: `@repo/shared` — TypeScript types shared between FE and BE
 - **Tooling**: ESLint + Prettier + Turborepo

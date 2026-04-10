@@ -2,7 +2,7 @@
   "name": "claude-code-fullstack-boilerplate",
   "private": true,
   "version": "1.0.0",
-  "description": "Fullstack boilerplate with React + Vite frontend and NestJS backend",
+  "description": "Fullstack boilerplate with Next.js frontend and NestJS backend",
   "packageManager": "npm@10.0.0",
   "workspaces": [
     "frontend",
