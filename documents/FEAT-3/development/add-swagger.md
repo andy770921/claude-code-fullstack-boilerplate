@@ -754,3 +754,192 @@ You have successfully:
 - ✅ Deployed to production with documentation
 
 The backend now serves interactive API documentation at the root URL, making it easy for developers to understand and test the available endpoints.
+
+---
+
+## Addendum (FEAT-4): Replace `SwaggerModule.setup('/')` for Vercel Compatibility
+
+**Why this addendum exists:** FEAT-3 Phase 5 / Phase 6 wired Swagger into both
+`backend/src/main.ts` and `backend/api/index.ts` via `SwaggerModule.setup('/')`. That
+works locally but produces a blank page on Vercel because the relative-path assets
+emitted by `@nestjs/swagger@11` are not bundled into the lambda by `@vercel/nft`. The
+fix is tracked under FEAT-4. This section documents the resulting changes to the
+files you set up here, so the FEAT-3 walkthrough does not silently rot.
+
+### What Changes vs. FEAT-3 Phase 5 / Phase 6
+
+| File | FEAT-3 (current) | FEAT-4 (final) |
+|---|---|---|
+| `backend/src/common/swagger-cdn.ts` | does not exist | new helper exporting `setupSwaggerCdn(app, document)` |
+| `backend/src/main.ts` | calls `SwaggerModule.setup('/', ...)` | calls `setupSwaggerCdn(app, document)` |
+| `backend/api/index.ts` | calls `SwaggerModule.setup('/', ...)` with dead `customCssUrl` / `customJs` | calls `setupSwaggerCdn(app, document)`, override block removed |
+
+`SwaggerModule.createDocument(app, config)` stays in both entry points — we still
+need the OpenAPI object it produces. Only `SwaggerModule.setup(...)` is replaced.
+
+### New Helper: `backend/src/common/swagger-cdn.ts`
+
+Mount our own `GET /` and `GET /api-json` handlers directly on the underlying
+Express adapter, so the same code path runs locally and on Vercel. All interpolated
+values flow through `JSON.stringify(...)` (or HTML escaping) so callers cannot
+escape attribute or string context.
+
+```ts
+import { INestApplication } from '@nestjs/common';
+import { OpenAPIObject } from '@nestjs/swagger';
+
+const SWAGGER_UI_VERSION = '5.17.14';
+const CDN = `https://cdn.jsdelivr.net/npm/swagger-ui-dist@${SWAGGER_UI_VERSION}`;
+
+interface SetupSwaggerCdnOptions {
+  openApiPath?: string;
+  uiPath?: string;
+  siteTitle?: string;
+}
+
+export function setupSwaggerCdn(
+  app: INestApplication,
+  document: OpenAPIObject,
+  options: SetupSwaggerCdnOptions = {},
+): void {
+  const openApiPath = options.openApiPath ?? '/api-json';
+  const uiPath = options.uiPath ?? '/';
+  const siteTitle = options.siteTitle ?? 'Backend API Documentation';
+
+  const httpAdapter = app.getHttpAdapter();
+
+  httpAdapter.get(openApiPath, (_req: unknown, res: any) => {
+    res.type('application/json').send(document);
+  });
+
+  const html = renderSwaggerHtml(openApiPath, siteTitle);
+  httpAdapter.get(uiPath, (_req: unknown, res: any) => {
+    res.type('text/html').send(html);
+  });
+}
+
+function renderSwaggerHtml(openApiUrl: string, siteTitle: string): string {
+  const safeUrl = JSON.stringify(openApiUrl);
+  const safeTitle = escapeHtml(siteTitle);
+  const cssHref = JSON.stringify(`${CDN}/swagger-ui.css`);
+  const bundleSrc = JSON.stringify(`${CDN}/swagger-ui-bundle.js`);
+  const presetSrc = JSON.stringify(`${CDN}/swagger-ui-standalone-preset.js`);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>${safeTitle}</title>
+  <link rel="stylesheet" href=${cssHref} />
+  <link rel="icon" href="https://nestjs.com/favicon.ico" />
+  <style>body { margin: 0; }</style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src=${bundleSrc}></script>
+  <script src=${presetSrc}></script>
+  <script>
+    window.addEventListener('load', function () {
+      window.ui = SwaggerUIBundle({
+        url: ${safeUrl},
+        dom_id: '#swagger-ui',
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: 'StandaloneLayout',
+      });
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+```
+
+**Notes on the helper:**
+- `INestApplication` (not `NestExpressApplication`) is enough — we only need
+  `getHttpAdapter()`.
+- The handlers are registered on the underlying Express adapter, so NestJS
+  controller routing (e.g. `/api/health`) is unaffected.
+- The CDN version is a single constant; bumping `swagger-ui-dist` is a one-line
+  change.
+- Both `main.ts` and `api/index.ts` call this helper exactly once per app boot.
+
+### Updated `backend/src/main.ts` (relevant block)
+
+Replace the FEAT-3 Phase 5 setup:
+
+```ts
+const document = SwaggerModule.createDocument(app, config);
+SwaggerModule.setup('/', app, document, {
+  customSiteTitle: 'Backend API Documentation',
+  customfavIcon: 'https://nestjs.com/favicon.ico',
+});
+```
+
+with:
+
+```ts
+import { setupSwaggerCdn } from './common/swagger-cdn';
+// ...
+const document = SwaggerModule.createDocument(app, config);
+setupSwaggerCdn(app, document);
+```
+
+### Updated `backend/api/index.ts` (relevant block)
+
+Replace the FEAT-3 Phase 6 setup (which also includes the `customCssUrl` / `customJs`
+override that `@nestjs/swagger@11` ignores):
+
+```ts
+const document = SwaggerModule.createDocument(app, config);
+SwaggerModule.setup('/', app, document, {
+  customSiteTitle: 'Backend API Documentation',
+  customfavIcon: 'https://nestjs.com/favicon.ico',
+  customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
+  customJs: [
+    'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.min.js',
+  ],
+});
+```
+
+with:
+
+```ts
+import { setupSwaggerCdn } from '../src/common/swagger-cdn';
+// ...
+const document = SwaggerModule.createDocument(app, config);
+setupSwaggerCdn(app, document);
+```
+
+### Verification (in addition to FEAT-3 Phase 8)
+
+After the FEAT-4 changes are applied, the FEAT-3 verification steps still pass, and
+two extra checks become possible:
+
+1. **View source on `http://localhost:3000/`.** The `<link>` and `<script>` tags must
+   point at `cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/...`, not at relative
+   `./swagger-ui.css` paths. Same expectation on the Vercel preview URL.
+2. **Vercel preview `https://<preview>.vercel.app/`.** The Swagger UI must render
+   fully, with `window.SwaggerUIBundle` defined in the browser console. This is the
+   exact failure that FEAT-4 fixes; if it still reproduces, recheck that
+   `setupSwaggerCdn` is wired in `api/index.ts` (not just `main.ts`).
+
+### Why Not Just Fix `customCssUrl` / `customJs`
+
+The FEAT-3 Phase 6 file already attempted this with cdnjs URLs. It silently has no
+effect because `@nestjs/swagger@11` does not inject those overrides into the rendered
+HTML. The CDN shell described in FEAT-4 sidesteps `SwaggerModule.setup` entirely.
+
+### Cross-References
+
+- FEAT-4 PRD (deployment hardening umbrella): `documents/FEAT-4/plans/prd.md`
+- Vercel config (required for `@repo/shared` to load at runtime): `documents/FEAT-4/development/vercel-config.md`
+- Shared package fix (sibling problem on the same deploy): `documents/FEAT-4/development/shared-package-build.md`

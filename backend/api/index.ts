@@ -3,6 +3,7 @@ import { AppModule } from '../src/app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import { setupSwaggerCdn } from '../src/common/swagger-cdn';
 
 let app: NestExpressApplication;
 
@@ -24,15 +25,7 @@ async function bootstrap() {
       .build();
 
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('/', app, document, {
-      customSiteTitle: 'Backend API Documentation',
-      customfavIcon: 'https://nestjs.com/favicon.ico',
-      customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
-      customJs: [
-        'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-standalone-preset.min.js',
-      ],
-    });
+    setupSwaggerCdn(app, document);
 
     await app.init();
   }

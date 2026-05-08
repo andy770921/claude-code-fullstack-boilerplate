@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { setupSwaggerCdn } from './common/swagger-cdn';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,10 +22,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('/', app, document, {
-    customSiteTitle: 'Backend API Documentation',
-    customfavIcon: 'https://nestjs.com/favicon.ico',
-  });
+  setupSwaggerCdn(app, document);
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);

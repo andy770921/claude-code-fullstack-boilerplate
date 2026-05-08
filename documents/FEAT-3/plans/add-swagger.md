@@ -311,3 +311,65 @@ The implementation will be considered successful when:
 - **Priority**: High
 - **Estimated Effort**: 2-3 hours
 - **Dependencies**: None
+
+---
+
+## Addendum (FEAT-4): Vercel Failure Mode and CDN Shell
+
+The original FEAT-3 plan is correct for local development, but `SwaggerModule.setup('/')`
+breaks once the backend is deployed to Vercel. Capturing the failure mode and the chosen
+fix here so the next person reading the FEAT-3 plan does not repeat the discovery.
+
+### Symptom
+
+- Local `npm run dev`: `http://localhost:3000/` renders Swagger UI normally.
+- Vercel deploy: the same URL returns `200` and the HTML loads, but the page is blank.
+  `<div id="swagger-ui">` never gets populated; the browser console shows `404`s for
+  `./swagger-ui.css`, `./swagger-ui-bundle.js`, and `./swagger-ui-standalone-preset.js`.
+
+### Root Cause
+
+`SwaggerModule.setup` from `@nestjs/swagger@11` emits HTML with **relative** asset URLs.
+Locally Express serves those files from `node_modules/swagger-ui-dist`. On Vercel,
+`@vercel/nft` traces lambda dependencies statically; the runtime `fs` reads
+`SwaggerModule` performs are not visible to the tracer, the assets are missing from
+the lambda, and the `<script>` tags 404. `window.SwaggerUIBundle` therefore never
+registers, and the UI bootstrap script silently no-ops.
+
+Patching `customCssUrl` / `customJs` on `SwaggerModule.setup` is **not** a fix:
+`@nestjs/swagger@11` does not actually inject those overrides into the produced HTML.
+Verified during the FIX-5/bread-repo investigation.
+
+### Fix (Option B, chosen)
+
+Replace `SwaggerModule.setup('/')` with a small CDN-backed UI shell that registers
+two routes directly on the HTTP adapter:
+
+- `GET /api-json` — returns the OpenAPI document produced by
+  `SwaggerModule.createDocument(...)`.
+- `GET /` — returns a fixed HTML shell whose `<link>` and `<script>` tags load
+  Swagger UI assets from `cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14`.
+
+The HTML shell is identical in dev and prod, so the "works locally / blank in prod"
+failure mode disappears. The full implementation — including the
+`backend/src/common/swagger-cdn.ts` source and the entry-point edits — lives in
+the addendum at the bottom of `documents/FEAT-3/development/add-swagger.md`.
+
+### Alternative Considered (Option A)
+
+Copy `swagger-ui-dist` into the lambda via `vercel.json#functions[*].includeFiles`,
+keeping `SwaggerModule.setup` on the Nest side. Rejected because:
+
+- Adds ~2 MB to every cold start.
+- Re-introduces a dev/prod divergence (locally Express serves the files; in prod the
+  lambda serves them from the bundled tree).
+- Still leaves the relative-URL HTML emitted by `SwaggerModule.setup` as the source
+  of truth, which makes future swagger-ui upgrades brittle.
+
+The CDN shell is a smaller diff and produces a single code path everywhere.
+
+### Cross-References
+
+- FEAT-4 PRD (deployment hardening umbrella): `documents/FEAT-4/plans/prd.md`
+- Implementation: see the addendum in `documents/FEAT-3/development/add-swagger.md`
+- Vercel config dependency: `documents/FEAT-4/development/vercel-config.md`
