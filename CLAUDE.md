@@ -101,5 +101,10 @@ Located in `.claude/commands/[skill-name]/SKILL.md`. Replace `[TICKET]` with tic
 ## Deployment (Vercel)
 
 - **Frontend**: set root directory `frontend`, auto-detected as Next.js
-- **Backend**: set root directory `backend`, runs as serverless function via `backend/api/index.ts`
-- Backend serverless limitations: cold starts, no WebSockets, 10s timeout
+- **Backend**: set root directory `backend`, runs as serverless function via `backend/api/index.ts`. Enable **Include source files outside of the Root Directory in the Build Step** (`installCommand` runs `cd ..`)
+- **`backend/vercel.json`** pins `framework: null`, so the result doesn't depend on the dashboard Framework Preset. That preset requires a non-empty `outputDirectory`, so `buildCommand` writes `public/.gitkeep`
+  - Don't revert `buildCommand` to `"true"`: the deploy fails with `STATIC_BUILD_NO_OUT_DIR`
+  - Don't add `public/index.html`: it would shadow Swagger UI at `/`
+  - `rewrites` cover every HTTP method, including HEAD; don't reintroduce legacy `builds`/`routes`/`version`
+  - Check changes with a local `vercel build` before pushing (see `documents/FEAT-5/`)
+- Backend serverless limitations: cold starts, no WebSockets, function max duration 300s on Hobby

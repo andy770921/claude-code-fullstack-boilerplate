@@ -1,5 +1,10 @@
 # Implementation Plan: Modernize `backend/vercel.json`
 
+> **Superseded (2026-11-03):** this plan's `buildCommand: "npm run build"` was later changed to
+> `"true"` (`8a621aa`). That config only deployed under the NestJS framework preset. The current
+> config and its rationale are in
+> [`documents/FEAT-5`](../../FEAT-5/development/vercel-config-hardening.md).
+
 ## Overview
 
 The current `backend/vercel.json` uses the legacy `builds` + `routes` schema. In that mode, `@vercel/nft` traces the lambda's file dependencies through the `node_modules` symlink to `../shared/`, which is unreliable in a monorepo workspace setup. Even after `@repo/shared` is built into `dist/`, the lambda often does not contain those files at runtime.

@@ -1,7 +1,9 @@
 {
-  "version": 2,
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
   "installCommand": "cd .. && npm install --include=dev && cd shared && npm run build",
-  "buildCommand": "true",
+  "buildCommand": "mkdir -p public && touch public/.gitkeep",
+  "outputDirectory": "public",
   "functions": {
     "api/index.ts": {
       "includeFiles": "../shared/**/*"
